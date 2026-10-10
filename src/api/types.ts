@@ -56,7 +56,8 @@ export type AccountProfile = {
 
 /** GET /api/dashboard (voir backend/src/lib/services/dashboard.ts pour les règles de calcul). */
 export type DashboardStats = {
-  period: { start: IsoDate; previousStart: IsoDate; previousEnd: IsoDate };
+  /** `month` / `previousMonth` : « AAAA-MM », à afficher tels quels (pas de conversion de fuseau). */
+  period: { start: IsoDate; previousStart: IsoDate; previousEnd: IsoDate; month: string; previousMonth: string };
   revenue: number;
   previousRevenue: number;
   revenueChange: number | null;

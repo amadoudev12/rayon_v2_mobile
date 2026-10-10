@@ -27,7 +27,7 @@ export default function DashboardScreen() {
     <View style={styles.root}>
       <TabHeader
         title={`Bonjour ${profile.user.prenom}`}
-        subtitle={dashboard.data ? `Tableau de bord · ${formatMonth(dashboard.data.period.start)}` : 'Tableau de bord'}
+        subtitle={dashboard.data ? `Tableau de bord · ${formatMonth(dashboard.data.period.month)}` : 'Tableau de bord'}
         right={<StoreSwitcher />}
         stacked
       />

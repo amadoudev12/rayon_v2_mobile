@@ -57,8 +57,11 @@ export function formatDateTime(value: string | Date) {
   }
 }
 
-export function formatMonth(value: string | Date) {
-  const date = typeof value === 'string' ? new Date(value) : value;
+/** Mois « AAAA-MM » tel qu'envoyé par le backend, ex : « octobre 2026 ». */
+export function formatMonth(month: string) {
+  const [year, monthNumber] = month.split('-').map(Number);
+  // Date locale en milieu de mois : aucun fuseau ne peut la faire changer de mois.
+  const date = new Date(year, monthNumber - 1, 15);
   try {
     return new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' }).format(date);
   } catch {
