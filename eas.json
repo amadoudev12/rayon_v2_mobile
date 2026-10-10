@@ -6,7 +6,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://rayon-v2-backend.onrender.com",
-        "EXPO_PUBLIC_WEB_URL": "https://rayon-two.vercel.app"
+        "EXPO_PUBLIC_WEB_URL": "https://rayon-sigma.vercel.app/"
       }
     }
   }
