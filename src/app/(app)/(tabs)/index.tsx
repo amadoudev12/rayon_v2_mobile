@@ -10,7 +10,7 @@ import { useAccount } from '@/auth/SessionProvider';
 import { RevenueTrendChart, StatCard } from '@/components/dashboard';
 import { StoreSwitcher } from '@/components/StoreSwitcher';
 import { TabHeader } from '@/components/TabHeader';
-import { Badge, Button, Card, Divider, EmptyState, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
+import { Badge, Banner, Button, Card, Divider, EmptyState, ErrorState, LoadingState, SectionHeader } from '@/components/ui';
 import { formatDateTime, formatMoney, formatMonth, formatNumber, formatPercent } from '@/lib/format';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
@@ -47,6 +47,12 @@ export default function DashboardScreen() {
               colors={[colors.brand600]}
             />
           }>
+          {profile.subscription?.state === 'READ_ONLY' && (
+            <Banner message="Abonnement inactif : l'application est en lecture seule. Vos données restent consultables. Contactez Rayon pour le renouveler." />
+          )}
+          {profile.subscription && profile.subscription.state !== 'READ_ONLY' && (profile.subscription.endsSoon || profile.subscription.state === 'GRACE') && (
+            <Banner tone="warning" message="Votre abonnement se termine bientôt : pensez à le renouveler pour continuer à enregistrer vos ventes." />
+          )}
           <TodayCard
             stats={dashboard.data}
             currency={currency}

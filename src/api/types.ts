@@ -75,6 +75,8 @@ export type AccountProfile = {
   permissions: Permission[];
   /** Mot de passe temporaire (réinitialisé par un responsable) à remplacer avant tout. */
   doitChangerMotDePasse: boolean;
+  /** État de l'abonnement, calculé par le serveur. */
+  subscription: { state: 'UNMANAGED' | 'TRIAL' | 'ACTIVE' | 'GRACE' | 'READ_ONLY'; canWrite: boolean; accessUntil: IsoDate | null; endsSoon: boolean };
 };
 
 // --- Tableau de bord ---------------------------------------------------------
