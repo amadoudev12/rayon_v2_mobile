@@ -13,7 +13,14 @@ export type IsoDate = string;
 export type Role = 'OWNER' | 'ADMIN' | 'MANAGER' | 'SELLER' | 'STOCK_MANAGER';
 export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'OTHER';
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
-export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL';
+export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION';
+export type InventoryStatus = 'DRAFT' | 'IN_PROGRESS' | 'VALIDATED' | 'CANCELLED';
+export type InventoryLine = { id: number; produitNom: string; produitReference: string | null; categorieNom?: string | null; quantiteTheorique: number; quantiteComptee: number | null; coutUnitaire: Money; version: number };
+export type Inventory = { id: number; reference: string; libelle: string; statut: InventoryStatus; boutique: { nom: string }; lignes: InventoryLine[] };
+export type StockAlert = { type: 'STOCK' | 'REPEATED_LOSS'; produitId: number; produit: string; quantite: number; seuilAlerte: number; niveau: 'OUT' | 'LOW' | 'REPEATED_LOSS'; occurrences?: number };
+export type StockRow = { id: number; boutiqueId: number; produitId: number; quantite: number; seuilAlerte: number; niveau: 'OUT' | 'LOW' | 'NORMAL'; produit: { nom: string } };
+export type StockLoss = { id: number; reference: string; quantite: number; motif: string; statut: 'ACTIVE' | 'CANCELLED'; coutUnitaire: Money; canCancel: boolean; produit: { id: number; nom: string }; boutique: { nom: string }; creeLe: IsoDate };
+export type StockValuation = { quantiteTotale: number; valeurTotale: number; methode: string };
 
 /** Permissions calculées par le serveur (backend/src/lib/auth/permissions.ts). */
 export type Permission =
@@ -23,11 +30,23 @@ export type Permission =
   | 'category:manage'
   | 'product:manage'
   | 'stock:adjust'
+  | 'inventory:read'
+  | 'inventory:create'
+  | 'inventory:count'
+  | 'inventory:validate'
+  | 'inventory:cancel'
+  | 'loss:read'
+  | 'loss:create'
+  | 'loss:cancel'
+  | 'stock:threshold:manage'
+  | 'stock:report'
+  | 'stock-movement:read'
   | 'purchase:manage'
   | 'supplier:manage'
   | 'customer:manage'
   | 'sale:create'
   | 'sale:cancel'
+  | 'refund:manage'
   | 'expense:manage'
   | 'report:view';
 
@@ -65,11 +84,15 @@ export type DashboardStats = {
   averageBasket: number;
   todayRevenue: number;
   todaySalesCount: number;
-  costOfGoodsSold: number;
-  grossMargin: number;
+  todayCollected: number;
+  todayRefunded: number;
+  todayNetCollected: number;
+  pendingRefund: number;
+  costOfGoodsSold: number | null;
+  grossMargin: number | null;
   grossMarginRate: number | null;
-  expensesTotal: number;
-  netProfit: number;
+  expensesTotal: number | null;
+  netProfit: number | null;
   activeProductsCount: number;
   lowStockCount: number;
   outOfStockCount: number;
@@ -107,7 +130,7 @@ export type Product = {
   reference: string | null;
   codeBarres: string | null;
   unite: string;
-  prixAchat: Money;
+  prixAchat: Money | null;
   prixVente: Money;
   seuilAlerte: number;
   actif: boolean;
@@ -178,6 +201,7 @@ export type SaleDetails = {
   note: string | null;
   creeLe: IsoDate;
   annuleLe: IsoDate | null;
+  motifAnnulation: string | null;
   lignes: {
     id: number;
     quantite: number;
@@ -188,6 +212,8 @@ export type SaleDetails = {
   client: { id: number; nom: string; telephone: string | null } | null;
   vendeur: { id: number; prenom: string; nom: string };
   boutique: { id: number; nom: string };
+  paiements: { id: number; montant: Money; modePaiement: PaymentMethod | null; date: IsoDate; utilisateur: { prenom: string; nom: string } | null }[];
+  remboursements: { id: number; montant: Money; statut: 'PENDING' | 'PARTIALLY_REFUNDED' | 'COMPLETED'; motif: string; versements: { id: number; montant: Money; modePaiement: PaymentMethod; date: IsoDate; utilisateur: { prenom: string; nom: string } }[] }[];
 };
 
 /** Corps de POST /api/sales (validé par saleSchema côté serveur, qui fixe lui-même les prix). */
@@ -197,4 +223,6 @@ export type SaleInput = {
   boutiqueId: number;
   modePaiement: PaymentMethod;
   remise: number;
+  montantPaye?: number;
+  modePaiementAcompte?: Exclude<PaymentMethod, 'CREDIT'>;
 };

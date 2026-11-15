@@ -20,6 +20,7 @@ export default function AppLayout() {
       <Stack.Screen name="products/new" options={{ title: 'Nouveau produit' }} />
       <Stack.Screen name="sales/[id]" options={{ title: 'Vente' }} />
       <Stack.Screen name="sales/new" options={{ title: 'Nouvelle vente' }} />
+      <Stack.Screen name="inventories/[id]" options={{ title: 'Comptage inventaire' }} />
     </Stack>
   );
 }

@@ -52,7 +52,7 @@ export default function DashboardScreen() {
             currency={currency}
             onNewSale={can('sale:create') ? () => router.push('/sales/new') : undefined}
           />
-          <MonthStats stats={dashboard.data} currency={currency} />
+          <MonthStats stats={dashboard.data} currency={currency} canViewFinance={can('report:view')} />
 
           <SectionHeader title="Chiffre d'affaires — 7 derniers jours" />
           <Card style={styles.cardPadded}>
@@ -153,11 +153,11 @@ export default function DashboardScreen() {
 function TodayCard({ stats, currency, onNewSale }: { stats: DashboardStats; currency: string; onNewSale?: () => void }) {
   return (
     <View style={styles.today}>
-      <Text style={styles.todayLabel}>Encaissé aujourd&apos;hui</Text>
+      <Text style={styles.todayLabel}>Net encaissé aujourd&apos;hui</Text>
       <Text style={styles.todayValue} numberOfLines={1} adjustsFontSizeToFit>
-        {formatMoney(stats.todayRevenue, currency)}
+        {formatMoney(stats.todayNetCollected, currency)}
       </Text>
-      <Text style={styles.todayHint}>{stats.todaySalesCount} vente(s) aujourd&apos;hui</Text>
+      <Text style={styles.todayHint}>CA {formatMoney(stats.todayRevenue, currency)} · reçu {formatMoney(stats.todayCollected, currency)} · rendu {formatMoney(stats.todayRefunded, currency)} · à verser {formatMoney(stats.pendingRefund, currency)}</Text>
       {onNewSale && (
         <Pressable accessibilityRole="button" onPress={onNewSale} style={({ pressed }) => [styles.todayAction, pressed && { opacity: 0.85 }]}>
           <Ionicons name="add-circle" size={20} color={colors.brand700} />
@@ -168,7 +168,7 @@ function TodayCard({ stats, currency, onNewSale }: { stats: DashboardStats; curr
   );
 }
 
-function MonthStats({ stats, currency }: { stats: DashboardStats; currency: string }) {
+function MonthStats({ stats, currency, canViewFinance }: { stats: DashboardStats; currency: string; canViewFinance: boolean }) {
   const revenueHint =
     stats.revenueChange === null ? (
       <Text style={styles.statHint}>Pas de vente sur la même période le mois dernier</Text>
@@ -187,29 +187,29 @@ function MonthStats({ stats, currency }: { stats: DashboardStats; currency: stri
       <View style={styles.grid}>
         <View style={styles.gridRow}>
           <StatCard label="Chiffre d'affaires" icon="bar-chart-outline" value={formatMoney(stats.revenue, currency)} hint={revenueHint} />
-          <StatCard
+          {canViewFinance && <StatCard
             label="Bénéfice net"
             icon="cash-outline"
-            value={formatMoney(stats.netProfit, currency)}
-            tone={stats.netProfit >= 0 ? 'success' : 'danger'}
+            value={formatMoney(stats.netProfit ?? 0, currency)}
+            tone={(stats.netProfit ?? 0) >= 0 ? 'success' : 'danger'}
             hint="Marge brute − dépenses"
-          />
+          />}
         </View>
         <View style={styles.gridRow}>
-          <StatCard
+          {canViewFinance && <StatCard
             label="Marge brute"
             icon="trending-up-outline"
-            value={formatMoney(stats.grossMargin, currency)}
-            tone={stats.grossMargin < 0 ? 'danger' : 'default'}
+            value={formatMoney(stats.grossMargin ?? 0, currency)}
+            tone={(stats.grossMargin ?? 0) < 0 ? 'danger' : 'default'}
             hint={stats.grossMarginRate === null ? 'CA − coût des articles vendus' : `${formatPercent(stats.grossMarginRate, { signed: false })} du CA`}
-          />
-          <StatCard
+          />}
+          {canViewFinance && <StatCard
             label="Dépenses"
             icon="wallet-outline"
-            value={formatMoney(stats.expensesTotal, currency)}
-            tone={stats.expensesTotal > 0 ? 'danger' : 'default'}
+            value={formatMoney(stats.expensesTotal ?? 0, currency)}
+            tone={(stats.expensesTotal ?? 0) > 0 ? 'danger' : 'default'}
             hint="Boutique + charges générales"
-          />
+          />}
         </View>
         <View style={styles.gridRow}>
           <StatCard

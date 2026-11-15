@@ -19,4 +19,7 @@ export const MOVEMENT_LABELS: Record<StockMovementType, { label: string; tone: T
   SALE_CANCELLATION: { label: 'Vente annulée', tone: 'success' },
   ADJUSTMENT: { label: 'Ajustement', tone: 'warning' },
   INITIAL: { label: 'Stock initial', tone: 'neutral' },
+  INVENTORY_ADJUSTMENT: { label: 'Ajustement inventaire', tone: 'warning' },
+  LOSS: { label: 'Perte / casse', tone: 'danger' },
+  LOSS_CANCELLATION: { label: 'Perte annulée', tone: 'success' },
 };

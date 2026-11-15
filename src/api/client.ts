@@ -72,6 +72,7 @@ type RequestOptions = {
   authenticated?: boolean;
   /** Jeton à utiliser à la place du jeton courant (vérification juste après la connexion). */
   token?: string;
+  idempotencyKey?: string;
 };
 
 function buildUrl(path: string, query?: Record<string, QueryValue>) {
@@ -93,6 +94,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
   if (authenticated && token) headers.Authorization = `Bearer ${token}`;
+  if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);

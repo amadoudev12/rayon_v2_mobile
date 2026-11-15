@@ -1,7 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -49,6 +49,7 @@ const PAGE_SIZE = 30;
 type CartLine = { productId: number; name: string; unit: string; unitPrice: number; quantity: number; maxQuantity: number };
 
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
+const TENDER_OPTIONS = PAYMENT_OPTIONS.filter((option) => option.value !== 'CREDIT');
 
 /**
  * Enregistrement d'une vente en deux temps, pensé pour une main :
@@ -257,10 +258,15 @@ function Checkout({
   const customerSearch = useDebouncedValue(customerSearchText.trim());
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
   const [discountText, setDiscountText] = useState('');
+  const [firstPaymentText, setFirstPaymentText] = useState('');
+  const [firstTender, setFirstTender] = useState<Exclude<PaymentMethod, 'CREDIT'>>('CASH');
+  const saleKey = useRef<string | null>(null);
 
   const discount = Math.max(0, parseNumberInput(discountText) ?? 0);
-  const discountInvalid = discountText.trim() !== '' && (parseNumberInput(discountText) ?? -1) < 0;
   const total = Math.max(0, subtotal - discount);
+  const discountInvalid = (discountText.trim() !== '' && (parseNumberInput(discountText) ?? -1) < 0) || discount > subtotal;
+  const firstPayment = Math.max(0, parseNumberInput(firstPaymentText) ?? 0);
+  const creditInvalid = paymentMethod === 'CREDIT' && (!customer || firstPayment > total);
 
   const customers = useQuery({
     queryKey: ['customers', customerSearch],
@@ -286,8 +292,11 @@ function Checkout({
         boutiqueId: storeId,
         modePaiement: paymentMethod,
         remise: discount,
-      }),
+        montantPaye: paymentMethod === 'CREDIT' ? firstPayment : undefined,
+        modePaiementAcompte: paymentMethod === 'CREDIT' ? firstTender : undefined,
+      }, (saleKey.current ??= `${Date.now()}-${Math.random().toString(36).slice(2)}`)),
     onSuccess: async (created) => {
+      saleKey.current = null;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['sales'] }),
         queryClient.invalidateQueries({ queryKey: ['products'] }),
@@ -345,7 +354,16 @@ function Checkout({
             <ChipGroup options={PAYMENT_OPTIONS} value={paymentMethod} onChange={setPaymentMethod} wrap />
           </Field>
 
-          <Field label={`Remise (${currency})`} error={discountInvalid ? 'La remise doit être positive ou nulle.' : undefined}>
+          {paymentMethod === 'CREDIT' && <>
+            <Field label="Premier versement reçu" error={firstPayment > total ? 'Le versement dépasse le total.' : !customer ? 'Un client est obligatoire pour une vente à crédit.' : undefined}>
+              <Input value={firstPaymentText} onChangeText={setFirstPaymentText} keyboardType="decimal-pad" placeholder="0" />
+            </Field>
+            <Field label="Mode du premier versement">
+              <ChipGroup options={TENDER_OPTIONS} value={firstTender} onChange={(value) => { if (value !== 'CREDIT') setFirstTender(value); }} wrap />
+            </Field>
+          </>}
+
+          <Field label={`Remise (${currency})`} error={discountInvalid ? (discount > subtotal ? 'La remise ne peut pas dépasser le sous-total.' : 'La remise doit être positive ou nulle.') : undefined}>
             <Input value={discountText} onChangeText={setDiscountText} keyboardType="decimal-pad" placeholder="0" invalid={discountInvalid} />
           </Field>
 
@@ -364,7 +382,7 @@ function Checkout({
             label={`Encaisser ${formatMoney(total, currency)}`}
             icon="checkmark-circle"
             loading={sale.isPending}
-            disabled={cart.length === 0 || discountInvalid}
+            disabled={cart.length === 0 || discountInvalid || creditInvalid}
             onPress={() => sale.mutate()}
           />
         </View>

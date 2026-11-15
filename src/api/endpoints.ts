@@ -13,6 +13,12 @@ import type {
   SaleInput,
   SaleSummary,
   StockAdjustmentInput,
+  PaymentMethod,
+  Inventory,
+  StockAlert,
+  StockLoss,
+  StockValuation,
+  StockRow,
 } from './types';
 
 /**
@@ -77,6 +83,21 @@ export function adjustStock(productId: number, input: StockAdjustmentInput) {
   return requestData<{ quantite: number }>(`/api/products/${productId}/stock`, { method: 'POST', body: input });
 }
 
+// --- Inventaire & alertes ----------------------------------------------------
+
+export function listInventories() { return requestData<Inventory[]>('/api/inventories'); }
+export function getInventory(id: number) { return requestData<Inventory>(`/api/inventories/${id}`); }
+export function createInventory(input: { boutiqueId: number; libelle: string; selectionType: 'ALL' }) { return requestData<Inventory>('/api/inventories', { method: 'POST', body: input }); }
+export function countInventoryLine(inventoryId: number, lineId: number, quantiteComptee: number, version: number) { return requestData(`/api/inventories/${inventoryId}/lines/${lineId}/count`, { method: 'PUT', body: { quantiteComptee, version } }); }
+export function validateInventory(inventoryId: number) { return requestData<Inventory>(`/api/inventories/${inventoryId}/validate`, { method: 'POST', body: {} }); }
+export function getStockAlerts(storeId: number) { return requestData<StockAlert[]>('/api/stock/alerts', { query: { storeId } }); }
+export function listStock(storeId: number) { return request<Page<StockRow>>('/api/stock', { query: { storeId, limit: 100 } }); }
+export function createLoss(input: { boutiqueId: number; produitId: number; quantite: number; motif: string }, idempotencyKey: string) { return requestData('/api/losses', { method: 'POST', body: input, idempotencyKey }); }
+export function listLosses() { return requestData<StockLoss[]>('/api/losses'); }
+export function cancelLoss(id: number, motif: string) { return requestData<StockLoss>(`/api/losses/${id}/cancel`, { method: 'POST', body: { motif } }); }
+export function getStockValuation(storeId: number) { return requestData<StockValuation>('/api/stock/valuation', { query: { storeId } }); }
+export function setStockThreshold(input: { boutiqueId: number; produitId: number; seuilAlerte: number }) { return requestData('/api/stock/threshold', { method: 'PUT', body: input }); }
+
 export function listCategories() {
   return requestData<Category[]>('/api/categories');
 }
@@ -95,12 +116,20 @@ export function getSale(saleId: number) {
   return requestData<SaleDetails>(`/api/sales/${saleId}`);
 }
 
-export function createSale(input: SaleInput) {
-  return requestData<{ id: number }>('/api/sales', { method: 'POST', body: input });
+export function createSale(input: SaleInput, idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`) {
+  return requestData<{ id: number }>('/api/sales', { method: 'POST', body: input, idempotencyKey });
 }
 
-export function cancelSale(saleId: number) {
-  return requestData<{ id: number }>(`/api/sales/${saleId}/cancel`, { method: 'POST' });
+export function cancelSale(saleId: number, motif = 'Annulation demandée') {
+  return requestData<{ id: number }>(`/api/sales/${saleId}/cancel`, { method: 'POST', body: { motif } });
+}
+
+export function payRefund(refundId: number, montant: number, modePaiement: Exclude<PaymentMethod, 'CREDIT'>, idempotencyKey: string) {
+  return requestData(`/api/sales/refunds/${refundId}/payouts`, { method: 'POST', body: { montant, modePaiement }, idempotencyKey });
+}
+
+export function addSalePayment(saleId: number, montant: number, modePaiement: Exclude<PaymentMethod, 'CREDIT'>, idempotencyKey: string) {
+  return requestData(`/api/sales/${saleId}/payments`, { method: 'POST', body: { montant, modePaiement }, idempotencyKey });
 }
 
 export function listCustomers(params: { search?: string; limit?: number } = {}) {

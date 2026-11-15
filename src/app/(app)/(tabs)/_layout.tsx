@@ -35,6 +35,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="index" options={{ title: 'Accueil', tabBarIcon: tabIcon('grid-outline', 'grid') }} />
       <Tabs.Screen name="products" options={{ title: 'Produits', tabBarIcon: tabIcon('cube-outline', 'cube') }} />
       <Tabs.Screen name="sales" options={{ title: 'Ventes', tabBarIcon: tabIcon('receipt-outline', 'receipt') }} />
+      <Tabs.Screen name="stock" options={{ title: 'Stock', tabBarIcon: tabIcon('layers-outline', 'layers') }} />
       <Tabs.Screen name="account" options={{ title: 'Compte', tabBarIcon: tabIcon('person-circle-outline', 'person-circle') }} />
     </Tabs>
   );

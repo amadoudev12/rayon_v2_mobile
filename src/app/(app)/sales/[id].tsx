@@ -1,17 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useRef, useState } from 'react';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorMessage } from '@/api/client';
-import { cancelSale, getSale } from '@/api/endpoints';
+import { addSalePayment, cancelSale, getSale, payRefund } from '@/api/endpoints';
+import type { PaymentMethod } from '@/api/types';
 import { useAccount } from '@/auth/SessionProvider';
 import { useToast } from '@/components/Toast';
-import { Badge, Banner, Button, Card, Divider, ErrorState, InfoRow, LoadingState, SectionHeader } from '@/components/ui';
+import { Badge, Banner, Button, Card, ChipGroup, Divider, ErrorState, Field, InfoRow, Input, LoadingState, SectionHeader } from '@/components/ui';
 import { confirmAction } from '@/lib/confirm';
 import { formatDateTime, formatMoney, formatNumber, saleNumber } from '@/lib/format';
-import { PAYMENT_METHOD_LABELS } from '@/lib/labels';
+import { PAYMENT_METHOD_LABELS, PAYMENT_METHODS } from '@/lib/labels';
 import { colors, font, spacing } from '@/lib/theme';
+
+const TENDER_OPTIONS = PAYMENT_METHODS.filter((value) => value !== 'CREDIT').map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
 
 export default function SaleDetailsScreen() {
   const insets = useSafeAreaInsets();
@@ -20,12 +24,18 @@ export default function SaleDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const saleId = Number(id);
   const { currency, can } = useAccount();
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
+  const [paymentTender, setPaymentTender] = useState<Exclude<PaymentMethod, 'CREDIT'>>('CASH');
+  const [refundTender, setRefundTender] = useState<Exclude<PaymentMethod, 'CREDIT'>>('CASH');
+  const paymentKey = useRef<string | null>(null);
+  const payoutKey = useRef<string | null>(null);
   const validId = Number.isInteger(saleId) && saleId > 0;
 
   const sale = useQuery({ queryKey: ['sales', 'detail', saleId], queryFn: () => getSale(saleId), enabled: validId });
 
   const cancel = useMutation({
-    mutationFn: () => cancelSale(saleId),
+    mutationFn: () => cancelSale(saleId, cancelReason.trim()),
     onSuccess: async () => {
       // L'annulation remet les articles en stock et modifie les chiffres du tableau de bord.
       await Promise.all([
@@ -33,8 +43,21 @@ export default function SaleDetailsScreen() {
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
       ]);
-      toast('Vente annulée, stock rétabli');
+      toast('Vente annulée, stock rétabli et remboursement mis en attente si nécessaire');
     },
+  });
+  const payout = useMutation({
+    mutationFn: ({ refundId, amount, key }: { refundId: number; amount: number; key: string }) => payRefund(refundId, amount, refundTender, key),
+    onSuccess: async () => {
+      payoutKey.current = null;
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['sales', 'detail', saleId] }), queryClient.invalidateQueries({ queryKey: ['dashboard'] })]);
+      await sale.refetch();
+      toast('Remboursement réel enregistré');
+    },
+  });
+  const payment = useMutation({
+    mutationFn: ({ amount, key }: { amount: number; key: string }) => addSalePayment(saleId, amount, paymentTender, key),
+    onSuccess: async () => { paymentKey.current = null; setPaymentAmount(''); await sale.refetch(); await queryClient.invalidateQueries({ queryKey: ['dashboard'] }); toast('Paiement reçu enregistré'); },
   });
 
   if (!validId) return <ErrorState message="Cette vente est introuvable." />;
@@ -43,12 +66,12 @@ export default function SaleDetailsScreen() {
 
   const data = sale.data;
   const cancelled = data.statut === 'CANCELLED';
-  const resteAPayer = Number(data.total) - Number(data.montantPaye);
+  const resteAPayer = cancelled ? 0 : Number(data.total) - Number(data.montantPaye);
 
   function confirmCancel() {
     confirmAction({
       title: 'Annuler cette vente ?',
-      message: 'Les articles seront remis en stock. Cette action est définitive.',
+      message: `Motif : ${cancelReason.trim()}\n\nLes articles seront remis en stock. Les sommes reçues ouvriront une demande de remboursement à confirmer après remise réelle des fonds.`,
       confirmLabel: 'Annuler la vente',
       destructive: true,
       onConfirm: () => cancel.mutate(),
@@ -89,6 +112,25 @@ export default function SaleDetailsScreen() {
           <InfoRow label="Boutique" value={data.boutique.nom} />
         </Card>
 
+        {data.paiements.length > 0 && <>
+          <SectionHeader title="Paiements reçus" />
+          <Card style={styles.cardPadded}>{data.paiements.map((item, index) => <View key={item.id}>{index > 0 && <Divider />}<InfoRow label={`${formatDateTime(item.date)} · ${item.modePaiement ? PAYMENT_METHOD_LABELS[item.modePaiement] : 'Mode historique inconnu'}`} value={formatMoney(Number(item.montant), currency)} /></View>)}</Card>
+        </>}
+
+        {can('sale:create') && !cancelled && resteAPayer > 0 && <>
+          <SectionHeader title="Encaisser un versement" />
+          <Card style={styles.cardPadded}>
+            <Field label="Montant">
+              <Input value={paymentAmount} onChangeText={setPaymentAmount} keyboardType="decimal-pad" placeholder={formatMoney(resteAPayer, currency)} />
+            </Field>
+            <Field label="Mode de paiement">
+                  <ChipGroup options={TENDER_OPTIONS} value={paymentTender} onChange={setPaymentTender} wrap />
+            </Field>
+            {payment.isError && <Banner message={errorMessage(payment.error)} />}
+            <Button label="Enregistrer le paiement" loading={payment.isPending} disabled={!(Number(paymentAmount) > 0) || Number(paymentAmount) > resteAPayer} onPress={() => payment.mutate({ amount: Number(paymentAmount), key: (paymentKey.current ??= `${Date.now()}-${Math.random().toString(36).slice(2)}`) })} />
+          </Card>
+        </>}
+
         <SectionHeader title={`Articles (${data.lignes.length})`} />
         <Card>
           {data.lignes.map((line, index) => (
@@ -125,11 +167,33 @@ export default function SaleDetailsScreen() {
             </Card>
           </>
         )}
+
+        {data.remboursements.length > 0 && <>
+          <SectionHeader title="Remboursements" />
+          {data.remboursements.map((refund) => {
+            const alreadyPaid = refund.versements.reduce((sum, item) => sum + Number(item.montant), 0);
+            const remaining = Math.max(0, Number(refund.montant) - alreadyPaid);
+            return <Card key={refund.id} style={{ padding: spacing.lg, marginBottom: spacing.sm }}>
+              <InfoRow label={remaining > 0 ? 'À rembourser' : 'Remboursé'} value={formatMoney(remaining > 0 ? remaining : Number(refund.montant), currency)} />
+              <Text style={styles.note}>{refund.motif} · déjà rendu {formatMoney(alreadyPaid, currency)}</Text>
+              {refund.versements.map((item) => <Text key={item.id} style={styles.note}>{formatDateTime(item.date)} · {PAYMENT_METHOD_LABELS[item.modePaiement]} · {formatMoney(Number(item.montant), currency)}</Text>)}
+              {remaining > 0 && can('refund:manage') && <>
+                <Field label="Mode de remise">
+                  <ChipGroup options={TENDER_OPTIONS} value={refundTender} onChange={setRefundTender} wrap />
+                </Field>
+                <Button label={`Confirmer le remboursement de ${formatMoney(remaining, currency)}`} loading={payout.isPending} style={{ marginTop: spacing.md }} onPress={() => confirmAction({ title: 'Confirmer la remise des fonds ?', message: `Confirmez seulement si ${formatMoney(remaining, currency)} a été remis au client.`, confirmLabel: 'Fonds remis', onConfirm: () => payout.mutate({ refundId: refund.id, amount: remaining, key: (payoutKey.current ??= `${Date.now()}-${Math.random().toString(36).slice(2)}`) }) })} />
+              </>}
+            </Card>;
+          })}
+        </>}
       </ScrollView>
 
       {can('sale:cancel') && !cancelled && (
         <View style={[styles.actions, { paddingBottom: insets.bottom + spacing.md }]}>
-          <Button label="Annuler la vente" variant="danger" loading={cancel.isPending} onPress={confirmCancel} />
+          <Field label="Motif d'annulation">
+            <Input value={cancelReason} onChangeText={setCancelReason} placeholder="Raison de l'annulation" />
+          </Field>
+          <Button label="Annuler la vente" variant="danger" loading={cancel.isPending} disabled={cancelReason.trim().length < 3} onPress={confirmCancel} />
         </View>
       )}
     </View>
