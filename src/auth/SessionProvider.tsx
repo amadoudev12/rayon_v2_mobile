@@ -1,8 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { ApiError, setAuthToken, setUnauthorizedHandler } from '@/api/client';
-import { getProfile, login } from '@/api/endpoints';
+import { ApiError, setAuthToken, setPasswordChangeRequiredHandler, setUnauthorizedHandler } from '@/api/client';
+import { getProfile, login, logout } from '@/api/endpoints';
 import type { AccountProfile, Permission, StoreSummary } from '@/api/types';
 import { getStoredItem, removeStoredItem, setStoredItem } from '@/auth/storage';
 
@@ -106,7 +106,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setState({ status: 'signedIn', profile, activeStoreId: profile.defaultStoreId });
   }, []);
 
-  const signOut = useCallback(() => clearSession(null), [clearSession]);
+  // Déconnexion réelle : le serveur révoque la session avant l'oubli local du jeton.
+  const signOut = useCallback(async () => {
+    await logout().catch(() => undefined);
+    await clearSession(null);
+  }, [clearSession]);
 
   const setActiveStore = useCallback((storeId: number) => {
     setState((current) => {
@@ -125,6 +129,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         : current,
     );
   }, []);
+
+  // Mot de passe temporaire exigé par le serveur : le profil relu déclenche l'écran de changement.
+  useEffect(() => {
+    setPasswordChangeRequiredHandler(() => void refreshProfile().catch(() => undefined));
+    return () => setPasswordChangeRequiredHandler(null);
+  }, [refreshProfile]);
 
   const value = useMemo(
     () => ({ state, signIn, signOut, retry, setActiveStore, refreshProfile }),

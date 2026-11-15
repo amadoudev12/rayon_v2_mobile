@@ -38,6 +38,16 @@ export function login(identifiant: string, motDePasse: string) {
   });
 }
 
+/** Déconnexion réelle : la session est révoquée côté serveur. */
+export function logout() {
+  return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
+}
+
+/** Remplace le mot de passe ; les autres appareils sont déconnectés par le serveur. */
+export function changePassword(motDePasseActuel: string, nouveauMotDePasse: string) {
+  return request<{ message: string }>('/api/account/password', { method: 'POST', body: { motDePasseActuel, nouveauMotDePasse } });
+}
+
 /** `token` : pour vérifier un jeton tout juste reçu, avant de l'adopter comme session. */
 export function getProfile(token?: string) {
   return requestData<AccountProfile>('/api/me', { token });

@@ -1,9 +1,15 @@
-import { Stack } from 'expo-router';
+import { Redirect, Stack, usePathname, type Href } from 'expo-router';
 
+import { useAccount } from '@/auth/SessionProvider';
 import { colors } from '@/lib/theme';
 
 /** Espace connecté : les onglets, et par-dessus les écrans de détail et de saisie. */
 export default function AppLayout() {
+  const { profile } = useAccount();
+  const pathname = usePathname();
+  // Mot de passe temporaire : seul l'écran de changement est accessible.
+  if (profile.doitChangerMotDePasse && pathname !== '/change-password') return <Redirect href={'/change-password' as Href} />;
+
   return (
     <Stack
       screenOptions={{
@@ -21,6 +27,7 @@ export default function AppLayout() {
       <Stack.Screen name="sales/[id]" options={{ title: 'Vente' }} />
       <Stack.Screen name="sales/new" options={{ title: 'Nouvelle vente' }} />
       <Stack.Screen name="inventories/[id]" options={{ title: 'Comptage inventaire' }} />
+      <Stack.Screen name="change-password" options={{ title: 'Mot de passe' }} />
     </Stack>
   );
 }

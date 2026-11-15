@@ -1,5 +1,6 @@
 import Constants from 'expo-constants';
 import { useState } from 'react';
+import { router, type Href } from 'expo-router';
 import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { API_URL, errorMessage } from '@/api/client';
@@ -87,7 +88,8 @@ export default function AccountScreen() {
               : 'La gestion des membres, des boutiques et des paramètres se fait sur l’application web.'}
         </Text>
 
-        <Button label="Se déconnecter" icon="log-out-outline" variant="secondary" onPress={confirmSignOut} style={{ marginTop: spacing.xxl }} />
+        <Button label="Changer mon mot de passe" icon="key-outline" variant="secondary" onPress={() => router.push('/change-password' as Href)} style={{ marginTop: spacing.xxl }} />
+        <Button label="Se déconnecter" icon="log-out-outline" variant="secondary" onPress={confirmSignOut} style={{ marginTop: spacing.md }} />
 
         <Text style={styles.version}>
           Rayon {Constants.expoConfig?.version ?? ''}

@@ -24,12 +24,15 @@ export class ApiError extends Error {
   readonly status: number;
   /** Erreurs de validation par champ renvoyées par le serveur (Zod), le cas échéant. */
   readonly fieldErrors: Record<string, string[]>;
+  /** Code stable du serveur (ex : PASSWORD_CHANGE_REQUIRED, RATE_LIMITED). */
+  readonly code?: string;
 
-  constructor(status: number, message: string, fieldErrors: Record<string, string[]> = {}) {
+  constructor(status: number, message: string, fieldErrors: Record<string, string[]> = {}, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.code = code;
   }
 
   /** Le serveur n'a pas répondu (hors ligne, mauvaise adresse, délai dépassé). */
@@ -52,6 +55,12 @@ export function errorMessage(error: unknown, fallback = 'Une erreur est survenue
 // (stockage sécurisé) et son cycle de vie sont gérés par auth/SessionProvider.
 let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
+let onPasswordChangeRequired: (() => void) | null = null;
+
+/** Appelé quand le serveur exige le remplacement d'un mot de passe temporaire. */
+export function setPasswordChangeRequiredHandler(handler: (() => void) | null) {
+  onPasswordChangeRequired = handler;
+}
 
 export function setAuthToken(token: string | null) {
   authToken = token;
@@ -120,7 +129,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
   // Une réponse non JSON (page d'erreur d'un proxy, HTML…) est traitée comme un corps vide.
   const payload = (await response.json().catch(() => null)) as
-    | { message?: string; errors?: { fieldErrors?: Record<string, string[]> } }
+    | { message?: string; code?: string; errors?: { fieldErrors?: Record<string, string[]> } }
     | null;
 
   if (!response.ok) {
@@ -128,7 +137,9 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
       response.status,
       payload?.message ?? `Le serveur a répondu avec une erreur (${response.status}).`,
       payload?.errors?.fieldErrors ?? {},
+      payload?.code,
     );
+    if (payload?.code === 'PASSWORD_CHANGE_REQUIRED') onPasswordChangeRequired?.();
     // Uniquement pour le jeton courant : une vérification avec un jeton explicite gère elle-même son échec.
     if (response.status === 401 && authenticated && !options.token) onUnauthorized?.();
     throw error;

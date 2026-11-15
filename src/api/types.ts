@@ -43,7 +43,9 @@ export type Permission =
   | 'stock-movement:read'
   | 'purchase:manage'
   | 'supplier:manage'
+  | 'supplier:delete'
   | 'customer:manage'
+  | 'customer:delete'
   | 'sale:create'
   | 'sale:cancel'
   | 'refund:manage'
@@ -70,6 +72,8 @@ export type AccountProfile = {
   defaultStoreId: number;
   restrictedToStore: boolean;
   permissions: Permission[];
+  /** Mot de passe temporaire (réinitialisé par un responsable) à remplacer avant tout. */
+  doitChangerMotDePasse: boolean;
 };
 
 // --- Tableau de bord ---------------------------------------------------------
