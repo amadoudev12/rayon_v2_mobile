@@ -42,4 +42,5 @@ export const MOVEMENT_LABELS: Record<StockMovementType, { label: string; tone: T
   LOSS: { label: 'Perte / casse', tone: 'danger' },
   LOSS_CANCELLATION: { label: 'Perte annulée', tone: 'success' },
   SALE_RETURN: { label: 'Retour client', tone: 'success' },
+  PURCHASE_CANCELLATION: { label: 'Achat annulé', tone: 'danger' },
 };

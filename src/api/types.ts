@@ -13,7 +13,7 @@ export type IsoDate = string;
 export type Role = 'OWNER' | 'ADMIN' | 'MANAGER' | 'SELLER' | 'STOCK_MANAGER';
 export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'OTHER';
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
-export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION' | 'SALE_RETURN';
+export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION' | 'SALE_RETURN' | 'PURCHASE_CANCELLATION';
 export type InventoryStatus = 'DRAFT' | 'IN_PROGRESS' | 'VALIDATED' | 'CANCELLED';
 export type InventoryLine = { id: number; produitNom: string; produitReference: string | null; categorieNom?: string | null; quantiteTheorique: number; quantiteComptee: number | null; coutUnitaire: Money; version: number };
 export type Inventory = { id: number; reference: string; libelle: string; statut: InventoryStatus; boutique: { nom: string }; lignes: InventoryLine[] };
@@ -42,6 +42,7 @@ export type Permission =
   | 'stock:report'
   | 'stock-movement:read'
   | 'purchase:manage'
+  | 'purchase:cancel'
   | 'supplier:manage'
   | 'supplier:delete'
   | 'customer:manage'
