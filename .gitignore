@@ -47,3 +47,4 @@ example
 
 # le modèle de configuration, lui, est versionné
 !.env.example
+dist-ci/
