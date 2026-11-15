@@ -13,7 +13,7 @@ export type IsoDate = string;
 export type Role = 'OWNER' | 'ADMIN' | 'MANAGER' | 'SELLER' | 'STOCK_MANAGER';
 export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'OTHER';
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
-export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION';
+export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION' | 'SALE_RETURN';
 export type InventoryStatus = 'DRAFT' | 'IN_PROGRESS' | 'VALIDATED' | 'CANCELLED';
 export type InventoryLine = { id: number; produitNom: string; produitReference: string | null; categorieNom?: string | null; quantiteTheorique: number; quantiteComptee: number | null; coutUnitaire: Money; version: number };
 export type Inventory = { id: number; reference: string; libelle: string; statut: InventoryStatus; boutique: { nom: string }; lignes: InventoryLine[] };
@@ -47,6 +47,7 @@ export type Permission =
   | 'sale:create'
   | 'sale:cancel'
   | 'refund:manage'
+  | 'return:manage'
   | 'expense:manage'
   | 'report:view';
 
@@ -198,6 +199,16 @@ export type SaleDetails = {
   remise: Money;
   total: Money;
   montantPaye: Money;
+  /** Avoirs des retours, remise déduite. */
+  montantRetourne: Money;
+  /** Remboursements dus au client (versés ou non). */
+  montantARembourser: Money;
+  /** Solde dû par le client, calculé par le serveur. */
+  resteAPayer: Money;
+  /** Remboursements dus non encore versés. */
+  remboursementEnAttente: Money;
+  etatFinancier: SettlementState;
+  typeAnnulation: 'REFUND' | 'ENTRY_ERROR' | 'LEGACY' | null;
   note: string | null;
   creeLe: IsoDate;
   annuleLe: IsoDate | null;
@@ -205,6 +216,8 @@ export type SaleDetails = {
   lignes: {
     id: number;
     quantite: number;
+    quantiteRetournee: number;
+    quantiteRestante: number;
     prixUnitaire: Money;
     sousTotal: Money;
     produit: { id: number; nom: string; unite: string };
@@ -212,8 +225,33 @@ export type SaleDetails = {
   client: { id: number; nom: string; telephone: string | null } | null;
   vendeur: { id: number; prenom: string; nom: string };
   boutique: { id: number; nom: string };
-  paiements: { id: number; montant: Money; modePaiement: PaymentMethod | null; date: IsoDate; utilisateur: { prenom: string; nom: string } | null }[];
-  remboursements: { id: number; montant: Money; statut: 'PENDING' | 'PARTIALLY_REFUNDED' | 'COMPLETED'; motif: string; versements: { id: number; montant: Money; modePaiement: PaymentMethod; date: IsoDate; utilisateur: { prenom: string; nom: string } }[] }[];
+  paiements: { id: number; montant: Money; modePaiement: PaymentMethod | null; date: IsoDate; annule: boolean; motifAnnulation: string | null; utilisateur: { prenom: string; nom: string } | null }[];
+  remboursements: {
+    id: number;
+    montant: Money;
+    montantVerse: Money;
+    montantRestant: Money;
+    statut: 'PENDING' | 'PARTIALLY_REFUNDED' | 'COMPLETED';
+    motif: string;
+    versements: { id: number; montant: Money; modePaiement: PaymentMethod; date: IsoDate; utilisateur: { prenom: string; nom: string } }[];
+  }[];
+  retours: {
+    id: number;
+    montant: Money;
+    motif: string;
+    creeLe: IsoDate;
+    lignes: { id: number; quantite: number; montant: Money; remiseEnStock: boolean; produit: { nom: string; unite: string } }[];
+  }[];
+};
+
+export type SettlementState = 'SOLDEE' | 'CREANCE' | 'REMBOURSEMENT_EN_ATTENTE';
+export type Tender = Exclude<PaymentMethod, 'CREDIT'>;
+
+export type CancelSaleInput = { motif: string; type: 'REFUND' | 'ENTRY_ERROR'; remboursementImmediat?: { modePaiement: Tender } };
+export type SaleReturnInput = {
+  motif: string;
+  lignes: { ligneVenteId: number; quantite: number; remiseEnStock: boolean }[];
+  remboursementImmediat?: { modePaiement: Tender };
 };
 
 /** Corps de POST /api/sales (validé par saleSchema côté serveur, qui fixe lui-même les prix). */

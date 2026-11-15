@@ -1,3 +1,4 @@
+import { newIdempotencyKey } from '@/lib/idempotency';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
@@ -294,7 +295,7 @@ function Checkout({
         remise: discount,
         montantPaye: paymentMethod === 'CREDIT' ? firstPayment : undefined,
         modePaiementAcompte: paymentMethod === 'CREDIT' ? firstTender : undefined,
-      }, (saleKey.current ??= `${Date.now()}-${Math.random().toString(36).slice(2)}`)),
+      }, (saleKey.current ??= newIdempotencyKey("sale"))),
     onSuccess: async (created) => {
       saleKey.current = null;
       await Promise.all([

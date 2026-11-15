@@ -192,7 +192,7 @@ function MonthStats({ stats, currency, canViewFinance }: { stats: DashboardStats
             icon="cash-outline"
             value={formatMoney(stats.netProfit ?? 0, currency)}
             tone={(stats.netProfit ?? 0) >= 0 ? 'success' : 'danger'}
-            hint="Marge brute − dépenses"
+            hint="Marge brute − dépenses − pertes et écarts"
           />}
         </View>
         <View style={styles.gridRow}>
@@ -208,7 +208,7 @@ function MonthStats({ stats, currency, canViewFinance }: { stats: DashboardStats
             icon="wallet-outline"
             value={formatMoney(stats.expensesTotal ?? 0, currency)}
             tone={(stats.expensesTotal ?? 0) > 0 ? 'danger' : 'default'}
-            hint="Boutique + charges générales"
+            hint="Dépenses de la boutique (charges générales à part)"
           />}
         </View>
         <View style={styles.gridRow}>

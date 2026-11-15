@@ -14,6 +14,9 @@
  */
 import { ApiError, request, setAuthToken, setUnauthorizedHandler } from '../src/api/client';
 import * as api from '../src/api/endpoints';
+import { newIdempotencyKey } from '../src/lib/idempotency';
+
+const key = () => newIdempotencyKey('smoke');
 
 const OWNER = process.env.SMOKE_OWNER ?? 'demo@boutique-diallo.test';
 const SELLER = process.env.SMOKE_SELLER ?? 'vendeuse@boutique-diallo.test';
@@ -130,7 +133,7 @@ async function main() {
   check('produit inexistant → 404', missing?.status === 404);
 
   console.log('\nVentes');
-  const sale = await api.createSale({ lignes: [{ produitId: created.id, quantite: 2 }], boutiqueId: storeId, modePaiement: 'MOBILE_MONEY', remise: 400 });
+  const sale = await api.createSale({ lignes: [{ produitId: created.id, quantite: 2 }], boutiqueId: storeId, modePaiement: 'MOBILE_MONEY', remise: 400 }, key());
   const saleDetails = await api.getSale(sale.id);
   check(
     'vente : total calculé par le serveur (2 × 1200 − 400)',
@@ -140,9 +143,9 @@ async function main() {
   details = await api.getProduct(created.id, storeId);
   check('vente : stock décrémenté', details.quantiteStock === 13);
 
-  const tooMany = await failure(() => api.createSale({ lignes: [{ produitId: created.id, quantite: 999 }], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }));
+  const tooMany = await failure(() => api.createSale({ lignes: [{ produitId: created.id, quantite: 999 }], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }, key()));
   check('stock insuffisant → 409 avec le nom du produit', tooMany?.status === 409 && tooMany.message.includes('Stock insuffisant'), tooMany);
-  const emptySale = await failure(() => api.createSale({ lignes: [], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }));
+  const emptySale = await failure(() => api.createSale({ lignes: [], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }, key()));
   check('vente sans article → 400', emptySale?.status === 400, emptySale);
 
   const sales = await api.listSales({ storeId, search: name });
@@ -162,19 +165,19 @@ async function main() {
     api.createProduct({ nom: 'Interdit', unite: 'unité', categorieId: null, prixAchat: 1, prixVente: 2, seuilAlerte: 1 }, seller.defaultStoreId),
   );
   check('vendeur : création de produit → 403', sellerCreate?.status === 403, sellerCreate);
-  const sellerCancel = await failure(() => api.cancelSale(sale.id));
+  const sellerCancel = await failure(() => api.cancelSale(sale.id, { motif: 'Test automatique', type: 'REFUND' }, key()));
   check('vendeur : annulation de vente → 403', sellerCancel?.status === 403, sellerCancel);
-  const sellerSale = await api.createSale({ lignes: [{ produitId: created.id, quantite: 1 }], boutiqueId: seller.defaultStoreId, modePaiement: 'CASH', remise: 0 });
+  const sellerSale = await api.createSale({ lignes: [{ produitId: created.id, quantite: 1 }], boutiqueId: seller.defaultStoreId, modePaiement: 'CASH', remise: 0 }, key());
   check('vendeur : enregistrement de vente autorisé', sellerSale.id > sale.id);
 
   console.log('\nAnnulation et nettoyage');
   await signIn(OWNER);
-  await api.cancelSale(sellerSale.id);
-  await api.cancelSale(sale.id);
+  await api.cancelSale(sellerSale.id, { motif: 'Test automatique', type: 'REFUND' }, key());
+  await api.cancelSale(sale.id, { motif: 'Test automatique', type: 'REFUND' }, key());
   const cancelled = await api.getSale(sale.id);
   details = await api.getProduct(created.id, storeId);
   check('annulation : statut + stock rétabli', cancelled.statut === 'CANCELLED' && details.quantiteStock === 15, { stock: details.quantiteStock });
-  const twice = await failure(() => api.cancelSale(sale.id));
+  const twice = await failure(() => api.cancelSale(sale.id, { motif: 'Test automatique', type: 'REFUND' }, key()));
   check('double annulation → 409', twice?.status === 409, twice);
   const dashboardEnd = await api.getDashboard(storeId);
   check('tableau de bord : ventes annulées exclues', dashboardEnd.todayRevenue === dashboardBefore.todayRevenue);
@@ -183,7 +186,7 @@ async function main() {
   const active = await api.listProducts({ storeId, search: name, status: 'active' });
   const archived = await api.listProducts({ storeId, search: name, status: 'archived' });
   check('archivage : produit retiré des produits actifs', active.data.length === 0 && archived.data.length === 1);
-  const archivedSale = await failure(() => api.createSale({ lignes: [{ produitId: created.id, quantite: 1 }], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }));
+  const archivedSale = await failure(() => api.createSale({ lignes: [{ produitId: created.id, quantite: 1 }], boutiqueId: storeId, modePaiement: 'CASH', remise: 0 }, key()));
   check('vente d’un produit archivé → 404', archivedSale?.status === 404, archivedSale);
 
   console.log(`\n${passed} vérification(s) réussie(s), ${failures.length} échec(s).`);

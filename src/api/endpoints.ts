@@ -11,6 +11,8 @@ import type {
   ProductInput,
   SaleDetails,
   SaleInput,
+  CancelSaleInput,
+  SaleReturnInput,
   SaleSummary,
   StockAdjustmentInput,
   PaymentMethod,
@@ -116,12 +118,18 @@ export function getSale(saleId: number) {
   return requestData<SaleDetails>(`/api/sales/${saleId}`);
 }
 
-export function createSale(input: SaleInput, idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2)}`) {
+export function createSale(input: SaleInput, idempotencyKey: string) {
   return requestData<{ id: number }>('/api/sales', { method: 'POST', body: input, idempotencyKey });
 }
 
-export function cancelSale(saleId: number, motif = 'Annulation demandée') {
-  return requestData<{ id: number }>(`/api/sales/${saleId}/cancel`, { method: 'POST', body: { motif } });
+/** Annulation idempotente : la même clé rejouée après une coupure ne fait rien de plus. */
+export function cancelSale(saleId: number, input: CancelSaleInput, idempotencyKey: string) {
+  return requestData<SaleDetails>(`/api/sales/${saleId}/cancel`, { method: 'POST', body: input, idempotencyKey });
+}
+
+/** Retour d'articles : avoir, remise en stock éventuelle, remboursement de l'excédent payé. */
+export function createSaleReturn(saleId: number, input: SaleReturnInput, idempotencyKey: string) {
+  return requestData<SaleDetails>(`/api/sales/${saleId}/returns`, { method: 'POST', body: input, idempotencyKey });
 }
 
 export function payRefund(refundId: number, montant: number, modePaiement: Exclude<PaymentMethod, 'CREDIT'>, idempotencyKey: string) {
