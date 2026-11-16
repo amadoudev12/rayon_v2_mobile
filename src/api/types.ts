@@ -15,12 +15,59 @@ export type PaymentMethod = 'CASH' | 'CARD' | 'MOBILE_MONEY' | 'CREDIT' | 'OTHER
 export type SaleStatus = 'COMPLETED' | 'CANCELLED';
 export type StockMovementType = 'PURCHASE' | 'SALE' | 'SALE_CANCELLATION' | 'ADJUSTMENT' | 'INITIAL' | 'INVENTORY_ADJUSTMENT' | 'LOSS' | 'LOSS_CANCELLATION' | 'SALE_RETURN' | 'PURCHASE_CANCELLATION';
 export type InventoryStatus = 'DRAFT' | 'IN_PROGRESS' | 'VALIDATED' | 'CANCELLED';
-export type InventoryLine = { id: number; produitNom: string; produitReference: string | null; categorieNom?: string | null; quantiteTheorique: number; quantiteComptee: number | null; coutUnitaire: Money; version: number };
-export type Inventory = { id: number; reference: string; libelle: string; statut: InventoryStatus; boutique: { nom: string }; lignes: InventoryLine[] };
-export type StockAlert = { type: 'STOCK' | 'REPEATED_LOSS'; produitId: number; produit: string; quantite: number; seuilAlerte: number; niveau: 'OUT' | 'LOW' | 'REPEATED_LOSS'; occurrences?: number };
-export type StockRow = { id: number; boutiqueId: number; produitId: number; quantite: number; seuilAlerte: number; niveau: 'OUT' | 'LOW' | 'NORMAL'; produit: { nom: string } };
-export type StockLoss = { id: number; reference: string; quantite: number; motif: string; statut: 'ACTIVE' | 'CANCELLED'; coutUnitaire: Money; canCancel: boolean; produit: { id: number; nom: string }; boutique: { nom: string }; creeLe: IsoDate };
-export type StockValuation = { quantiteTotale: number; valeurTotale: number; methode: string };
+export type InventoryLine = {
+  id: number;
+  produitNom: string;
+  produitReference: string | null;
+  categorieNom?: string | null;
+  quantiteTheorique: number;
+  quantiteComptee: number | null;
+  coutUnitaire: Money;
+  version: number;
+};
+export type Inventory = {
+  id: number;
+  reference: string;
+  libelle: string;
+  statut: InventoryStatus;
+  creeLe: IsoDate;
+  boutique: { nom: string };
+  lignes: InventoryLine[];
+  canValidate?: boolean;
+  canCancel?: boolean;
+};
+export type InventorySummary = Omit<Inventory, 'lignes'> & { _count: { lignes: number } };
+export type StockAlert =
+  | { type: 'STOCK'; produitId: number; produit: string; quantite: number; seuilAlerte: number; niveau: 'OUT' | 'LOW' }
+  | { type: 'REPEATED_LOSS'; produitId: number; produit: string; quantite: number; seuilAlerte: number; niveau: 'REPEATED_LOSS'; occurrences: number };
+export type StockRow = {
+  id: number;
+  boutiqueId: number;
+  produitId: number;
+  quantite: number;
+  seuilAlerte: number;
+  niveau: 'OUT' | 'LOW' | 'NORMAL';
+  produit: { nom: string; unite: string };
+};
+/** Motifs de perte acceptés par le serveur (backend/src/lib/labels.ts). */
+export type LossReason = 'ENDOMMAGE' | 'CASSE' | 'PERIME' | 'VOL' | 'PERDU' | 'DESTRUCTION' | 'AUTRE';
+export type StockLoss = {
+  id: number;
+  reference: string;
+  quantite: number;
+  motif: string;
+  motifLibelle: string;
+  description: string | null;
+  statut: 'ACTIVE' | 'CANCELLED';
+  valeur: Money;
+  motifAnnulation: string | null;
+  canCancel: boolean;
+  absorbeeParInventaire: boolean;
+  produit: { id: number; nom: string; unite: string };
+  creeLe: IsoDate;
+};
+/** Valorisation au coût d'achat courant ; montants exacts (texte décimal). */
+export type StockValuation = { produits: number; quantiteTotale: number; valeurTotale: Money; methode: string };
 
 /** Permissions calculées par le serveur (backend/src/lib/auth/permissions.ts). */
 export type Permission =

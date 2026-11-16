@@ -1,4 +1,4 @@
-import type { PaymentMethod, SettlementState, StockMovementType } from '@/api/types';
+import type { InventoryStatus, LossReason, PaymentMethod, SettlementState, StockMovementType } from '@/api/types';
 import type { Tone } from '@/lib/theme';
 
 /** Libellés affichés pour chaque mode de paiement (mêmes textes que le web). */
@@ -43,4 +43,22 @@ export const MOVEMENT_LABELS: Record<StockMovementType, { label: string; tone: T
   LOSS_CANCELLATION: { label: 'Perte annulée', tone: 'success' },
   SALE_RETURN: { label: 'Retour client', tone: 'success' },
   PURCHASE_CANCELLATION: { label: 'Achat annulé', tone: 'danger' },
+};
+
+/** Motifs de perte, dans l'ordre proposé à la déclaration (mêmes valeurs que le serveur). */
+export const LOSS_REASON_OPTIONS: { value: LossReason; label: string }[] = [
+  { value: 'ENDOMMAGE', label: 'Endommagé' },
+  { value: 'CASSE', label: 'Casse' },
+  { value: 'PERIME', label: 'Périmé' },
+  { value: 'VOL', label: 'Vol' },
+  { value: 'PERDU', label: 'Perdu' },
+  { value: 'DESTRUCTION', label: 'Destruction' },
+  { value: 'AUTRE', label: 'Autre' },
+];
+
+export const INVENTORY_STATUS_LABELS: Record<InventoryStatus, { label: string; tone: Tone }> = {
+  DRAFT: { label: 'Brouillon', tone: 'neutral' },
+  IN_PROGRESS: { label: 'En cours', tone: 'warning' },
+  VALIDATED: { label: 'Validé', tone: 'success' },
+  CANCELLED: { label: 'Annulé', tone: 'danger' },
 };

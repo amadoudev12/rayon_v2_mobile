@@ -17,6 +17,9 @@ import type {
   StockAdjustmentInput,
   PaymentMethod,
   Inventory,
+  InventoryLine,
+  InventorySummary,
+  LossReason,
   StockAlert,
   StockLoss,
   StockValuation,
@@ -91,24 +94,73 @@ export function updateProduct(productId: number, input: ProductInput) {
   return requestData<Product>(`/api/products/${productId}`, { method: 'PUT', body: input });
 }
 
-export function adjustStock(productId: number, input: StockAdjustmentInput) {
-  return requestData<{ quantite: number }>(`/api/products/${productId}/stock`, { method: 'POST', body: input });
+/** Ajustement manuel ; la même clé est réutilisée tant que l'envoi n'a pas réussi (aucun doublon). */
+export function adjustStock(productId: number, input: StockAdjustmentInput, idempotencyKey: string) {
+  return requestData<{ quantite: number }>(`/api/products/${productId}/stock`, { method: 'POST', body: input, idempotencyKey });
 }
 
 // --- Inventaire & alertes ----------------------------------------------------
 
-export function listInventories() { return requestData<Inventory[]>('/api/inventories'); }
-export function getInventory(id: number) { return requestData<Inventory>(`/api/inventories/${id}`); }
-export function createInventory(input: { boutiqueId: number; libelle: string; selectionType: 'ALL' }) { return requestData<Inventory>('/api/inventories', { method: 'POST', body: input }); }
-export function countInventoryLine(inventoryId: number, lineId: number, quantiteComptee: number, version: number) { return requestData(`/api/inventories/${inventoryId}/lines/${lineId}/count`, { method: 'PUT', body: { quantiteComptee, version } }); }
-export function validateInventory(inventoryId: number) { return requestData<Inventory>(`/api/inventories/${inventoryId}/validate`, { method: 'POST', body: {} }); }
-export function getStockAlerts(storeId: number) { return requestData<StockAlert[]>('/api/stock/alerts', { query: { storeId } }); }
-export function listStock(storeId: number) { return request<Page<StockRow>>('/api/stock', { query: { storeId, limit: 100 } }); }
-export function createLoss(input: { boutiqueId: number; produitId: number; quantite: number; motif: string }, idempotencyKey: string) { return requestData('/api/losses', { method: 'POST', body: input, idempotencyKey }); }
-export function listLosses() { return requestData<StockLoss[]>('/api/losses'); }
-export function cancelLoss(id: number, motif: string) { return requestData<StockLoss>(`/api/losses/${id}/cancel`, { method: 'POST', body: { motif } }); }
-export function getStockValuation(storeId: number) { return requestData<StockValuation>('/api/stock/valuation', { query: { storeId } }); }
-export function setStockThreshold(input: { boutiqueId: number; produitId: number; seuilAlerte: number }) { return requestData('/api/stock/threshold', { method: 'PUT', body: input }); }
+/** Inventaires de la boutique (les plus récents d'abord). */
+export function listInventories(storeId: number) {
+  return requestData<InventorySummary[]>('/api/inventories', { query: { storeId } });
+}
+
+export function getInventory(id: number) {
+  return requestData<Inventory>(`/api/inventories/${id}`);
+}
+
+export function createInventory(storeId: number, input: { libelle: string; selectionType: 'ALL' }) {
+  return requestData<Inventory>('/api/inventories', { method: 'POST', body: { ...input, boutiqueId: storeId } });
+}
+
+export function countInventoryLine(inventoryId: number, lineId: number, quantiteComptee: number, version: number) {
+  return requestData<InventoryLine>(`/api/inventories/${inventoryId}/lines/${lineId}/count`, {
+    method: 'PUT',
+    body: { quantiteComptee, version },
+  });
+}
+
+export function validateInventory(inventoryId: number) {
+  return requestData<Inventory>(`/api/inventories/${inventoryId}/validate`, { method: 'POST', body: {} });
+}
+
+export function cancelInventory(inventoryId: number, motif: string) {
+  return requestData<Inventory>(`/api/inventories/${inventoryId}/cancel`, { method: 'POST', body: { motif } });
+}
+
+export function getStockAlerts(storeId: number) {
+  return requestData<StockAlert[]>('/api/stock/alerts', { query: { storeId } });
+}
+
+export function listStock(storeId: number, params: { search?: string; page?: number; limit?: number } = {}) {
+  return request<Page<StockRow>>('/api/stock', { query: { storeId, limit: 30, ...params } });
+}
+
+/** Déclare une perte ; la même clé est réutilisée tant que l'envoi n'a pas réussi. */
+export function createLoss(
+  storeId: number,
+  input: { produitId: number; quantite: number; motif: LossReason; description?: string },
+  idempotencyKey: string,
+) {
+  return requestData<StockLoss>('/api/losses', { method: 'POST', body: { ...input, boutiqueId: storeId }, idempotencyKey });
+}
+
+export function listLosses(storeId: number, page = 1) {
+  return request<Page<StockLoss>>('/api/losses', { query: { storeId, page, limit: 20 } });
+}
+
+export function cancelLoss(id: number, motif: string) {
+  return requestData<StockLoss>(`/api/losses/${id}/cancel`, { method: 'POST', body: { motif } });
+}
+
+export function getStockValuation(storeId: number) {
+  return requestData<StockValuation>('/api/stock/valuation', { query: { storeId } });
+}
+
+export function setStockThreshold(storeId: number, input: { produitId: number; seuilAlerte: number }) {
+  return requestData('/api/stock/threshold', { method: 'PUT', body: { ...input, boutiqueId: storeId } });
+}
 
 export function listCategories() {
   return requestData<Category[]>('/api/categories');

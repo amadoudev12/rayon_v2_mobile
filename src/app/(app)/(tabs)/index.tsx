@@ -163,7 +163,10 @@ function TodayCard({ stats, currency, onNewSale }: { stats: DashboardStats; curr
       <Text style={styles.todayValue} numberOfLines={1} adjustsFontSizeToFit>
         {formatMoney(stats.todayNetCollected, currency)}
       </Text>
-      <Text style={styles.todayHint}>CA {formatMoney(stats.todayRevenue, currency)} · reçu {formatMoney(stats.todayCollected, currency)} · rendu {formatMoney(stats.todayRefunded, currency)} · à verser {formatMoney(stats.pendingRefund, currency)}</Text>
+      <Text style={styles.todayHint}>
+        CA {formatMoney(stats.todayRevenue, currency)} · reçu {formatMoney(stats.todayCollected, currency)} · rendu{' '}
+        {formatMoney(stats.todayRefunded, currency)} · à verser {formatMoney(stats.pendingRefund, currency)}
+      </Text>
       {onNewSale && (
         <Pressable accessibilityRole="button" onPress={onNewSale} style={({ pressed }) => [styles.todayAction, pressed && { opacity: 0.85 }]}>
           <Ionicons name="add-circle" size={20} color={colors.brand700} />

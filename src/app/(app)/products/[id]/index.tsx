@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { KeyboardAvoidingView, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -11,6 +11,7 @@ import { useAccount } from '@/auth/SessionProvider';
 import { useToast } from '@/components/Toast';
 import { Badge, Banner, Button, Card, Divider, ErrorState, Field, InfoRow, Input, LoadingState, SectionHeader } from '@/components/ui';
 import { formatDateTime, formatMoney, formatNumber, formatPercent, parseNumberInput } from '@/lib/format';
+import { newIdempotencyKey } from '@/lib/idempotency';
 import { MOVEMENT_LABELS } from '@/lib/labels';
 import { colors, font, radius, spacing } from '@/lib/theme';
 
@@ -201,9 +202,16 @@ function StockAdjustSheet({
   const [note, setNote] = useState('');
   const [fieldError, setFieldError] = useState<string | null>(null);
 
+  // Même clé jusqu'au succès : un nouvel essai après une coupure n'ajuste jamais deux fois.
+  const adjustKey = useRef<string | null>(null);
+
   const mutation = useMutation({
-    mutationFn: (variationQuantite: number) => adjustStock(productId, { variationQuantite, note: note.trim(), boutiqueId: storeId }),
+    mutationFn: (variationQuantite: number) => {
+      adjustKey.current ??= newIdempotencyKey('adjust');
+      return adjustStock(productId, { variationQuantite, note: note.trim(), boutiqueId: storeId }, adjustKey.current);
+    },
     onSuccess: async () => {
+      adjustKey.current = null;
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['products'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
@@ -217,6 +225,7 @@ function StockAdjustSheet({
     setQuantity('');
     setNote('');
     setFieldError(null);
+    adjustKey.current = null;
     mutation.reset();
     onClose();
   }

@@ -123,10 +123,10 @@ async function main() {
   details = await api.getProduct(created.id, storeId);
   check('modification', details.nom.endsWith('(modifié)') && Number(details.prixVente) === 1200 && details.unite === 'pièce' && details.seuilAlerte === 4);
 
-  await api.adjustStock(created.id, { variationQuantite: 5, note: 'Test', boutiqueId: storeId });
+  await api.adjustStock(created.id, { variationQuantite: 5, note: 'Test', boutiqueId: storeId }, newIdempotencyKey('adjust'));
   details = await api.getProduct(created.id, storeId);
   check('ajustement de stock +5', details.quantiteStock === 15 && details.mouvementsStock[0]?.type === 'ADJUSTMENT');
-  const negative = await failure(() => api.adjustStock(created.id, { variationQuantite: -100, boutiqueId: storeId }));
+  const negative = await failure(() => api.adjustStock(created.id, { variationQuantite: -100, boutiqueId: storeId }, newIdempotencyKey('adjust')));
   check('ajustement sous zéro → 409', negative?.status === 409, negative);
 
   const missing = await failure(() => api.getProduct(99_999_999, storeId));
