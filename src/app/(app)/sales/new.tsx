@@ -2,7 +2,7 @@ import { newIdempotencyKey } from '@/lib/idempotency';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -18,7 +18,9 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { errorMessage } from '@/api/client';
-import { createCustomer, createSale, listCustomers, listProducts } from '@/api/endpoints';
+import { createCustomer, createSale, deleteHeldSale, getProduct, holdSale, listCustomers, listHeldSales, listProducts, resumeHeldSale } from '@/api/endpoints';
+import { clearSaleDraft, getSaleDraft, setSaleDraft, type DraftLine } from '@/lib/saleDraft';
+import { confirmAction } from '@/lib/confirm';
 import type { PaymentMethod, Product } from '@/api/types';
 import { useAccount } from '@/auth/SessionProvider';
 import { SelectSheet } from '@/components/SelectSheet';
@@ -47,7 +49,17 @@ import { useDebouncedValue } from '@/lib/useDebouncedValue';
 const PAGE_SIZE = 30;
 
 /** Ligne du panier : ce qu'il faut pour l'afficher et borner la quantité au stock connu. */
-type CartLine = { productId: number; name: string; unit: string; unitPrice: number; quantity: number; maxQuantity: number };
+type CartLine = DraftLine;
+type Customer = { id: number; nom: string };
+
+/** Lignes au format du serveur (le prix n'est envoyé que s'il a été négocié). */
+function serverLines(cart: CartLine[]) {
+  return cart.map((line) => ({
+    produitId: line.productId,
+    quantite: line.quantity,
+    ...(line.negotiatedPrice !== undefined ? { prixUnitaire: line.negotiatedPrice } : {}),
+  }));
+}
 
 const PAYMENT_OPTIONS = PAYMENT_METHODS.map((value) => ({ value, label: PAYMENT_METHOD_LABELS[value] }));
 const TENDER_OPTIONS = PAYMENT_OPTIONS.filter((option) => option.value !== 'CREDIT');
@@ -66,8 +78,86 @@ export default function NewSaleScreen() {
 
   const [searchText, setSearchText] = useState('');
   const search = useDebouncedValue(searchText.trim());
-  const [cart, setCart] = useState<CartLine[]>([]);
+  // Panier retrouvé en revenant sur l'écran (brouillon en mémoire, par boutique).
+  const [cart, setCart] = useState<CartLine[]>(() => getSaleDraft(activeStoreId)?.cart ?? []);
+  const [customer, setCustomer] = useState<Customer | null>(() => getSaleDraft(activeStoreId)?.customer ?? null);
+  const [resumedOptions, setResumedOptions] = useState<{ remise?: number; modePaiement?: string }>(() => {
+    const draft = getSaleDraft(activeStoreId);
+    return { remise: draft?.remise, modePaiement: draft?.modePaiement };
+  });
+  const [checkoutKey, setCheckoutKey] = useState(0);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const toast = useToast();
+
+  useEffect(() => {
+    setSaleDraft(activeStoreId, { cart, customer, ...resumedOptions });
+  }, [activeStoreId, cart, customer, resumedOptions]);
+
+  const heldSales = useQuery({ queryKey: ['held-sales', activeStoreId], queryFn: () => listHeldSales(activeStoreId), enabled: can('sale:create') });
+
+  function resetSale() {
+    setCart([]);
+    setCustomer(null);
+    setResumedOptions({});
+    setCheckoutKey((value) => value + 1);
+    clearSaleDraft(activeStoreId);
+  }
+
+  const hold = useMutation({
+    mutationFn: () => holdSale(activeStoreId, { lignes: serverLines(cart), clientId: customer?.id ?? null, ...resumedOptions }),
+    onSuccess: async (held) => {
+      resetSale();
+      await queryClient.invalidateQueries({ queryKey: ['held-sales', activeStoreId] });
+      toast(`Vente « ${held.libelle} » mise en attente`);
+    },
+  });
+
+  const resume = useMutation({
+    mutationFn: async (heldId: number) => {
+      // La vente en cours n'est jamais perdue : elle est d'abord mise en attente.
+      if (cart.length > 0) await holdSale(activeStoreId, { lignes: serverLines(cart), clientId: customer?.id ?? null, ...resumedOptions });
+      const resumed = await resumeHeldSale(heldId, activeStoreId);
+      const lines: CartLine[] = [];
+      const missing: string[] = [];
+      for (const line of resumed.panier.lignes) {
+        try {
+          const product = await getProduct(line.produitId, activeStoreId);
+          if (!product.actif || product.quantiteStock <= 0) {
+            missing.push(product.nom);
+            continue;
+          }
+          lines.push({
+            productId: product.id,
+            name: product.nom,
+            unit: product.unite,
+            unitPrice: line.prixUnitaire ?? Number(product.prixVente),
+            negotiatedPrice: line.prixUnitaire,
+            quantity: Math.min(line.quantite, product.quantiteStock),
+            maxQuantity: product.quantiteStock,
+          });
+        } catch {
+          missing.push(`produit n° ${line.produitId}`);
+        }
+      }
+      return { resumed, lines, missing };
+    },
+    onSuccess: async ({ resumed, lines, missing }) => {
+      setCart(lines);
+      const client = resumed.panier.clientId ? heldSales.data?.find((sale) => sale.client?.id === resumed.panier.clientId)?.client ?? null : null;
+      setCustomer(client);
+      setResumedOptions({ remise: resumed.panier.remise, modePaiement: resumed.panier.modePaiement });
+      setCheckoutKey((value) => value + 1);
+      await queryClient.invalidateQueries({ queryKey: ['held-sales', activeStoreId] });
+      toast(missing.length ? `Vente reprise ; retiré (indisponible) : ${missing.join(', ')}` : `Vente « ${resumed.libelle} » reprise`);
+    },
+    onError: () => void queryClient.invalidateQueries({ queryKey: ['held-sales', activeStoreId] }),
+  });
+
+  const removeHeld = useMutation({
+    mutationFn: (heldId: number) => deleteHeldSale(heldId, activeStoreId),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ['held-sales', activeStoreId] }),
+  });
 
   const products = useInfiniteQuery({
     queryKey: ['products', 'list', activeStoreId, search, 'active', 'sale'],
@@ -87,7 +177,7 @@ export default function NewSaleScreen() {
   const subtotal = cart.reduce((total, line) => total + line.unitPrice * line.quantity, 0);
 
   /** Fixe la quantité d'un produit dans le panier (0 le retire), sans dépasser le stock. */
-  function setQuantity(product: Pick<CartLine, 'productId' | 'name' | 'unit' | 'unitPrice' | 'maxQuantity'>, quantity: number) {
+  function setQuantity(product: Pick<CartLine, 'productId' | 'name' | 'unit' | 'unitPrice' | 'maxQuantity' | 'negotiatedPrice'>, quantity: number) {
     const bounded = Math.max(0, Math.min(quantity, product.maxQuantity));
     setCart((current) => {
       const others = current.filter((line) => line.productId !== product.productId);
@@ -104,6 +194,40 @@ export default function NewSaleScreen() {
     <View style={styles.root}>
       <View style={styles.searchArea}>
         <SearchBar value={searchText} onChangeText={setSearchText} placeholder="Rechercher un produit à ajouter" />
+        {(heldSales.data?.length ?? 0) > 0 && (
+          <View style={styles.heldBar}>
+            <Text style={styles.heldTitle}>En attente ({heldSales.data!.length})</Text>
+            {heldSales.data!.map((held) => (
+              <View key={held.id} style={styles.heldChip}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Reprendre la vente en attente ${held.libelle}`}
+                  disabled={resume.isPending}
+                  onPress={() => resume.mutate(held.id)}
+                  style={{ flex: 1 }}>
+                  <Text style={styles.heldLabel} numberOfLines={1}>{held.libelle}</Text>
+                  <Text style={styles.heldMeta}>{held.nombreArticles} art. · {formatMoney(Number(held.totalEstime), currency)} · {held.creePar.prenom}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Supprimer la vente en attente ${held.libelle}`}
+                  onPress={() =>
+                    confirmAction({
+                      title: 'Supprimer cette vente en attente ?',
+                      message: `Le panier « ${held.libelle} » sera abandonné. Rien n'avait été encaissé.`,
+                      confirmLabel: 'Supprimer',
+                      destructive: true,
+                      onConfirm: () => removeHeld.mutate(held.id),
+                    })
+                  }
+                  hitSlop={8}>
+                  <Ionicons name="close" size={18} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+        {(hold.isError || resume.isError) && <Banner message={errorMessage(hold.error ?? resume.error)} />}
       </View>
 
       {products.isPending ? (
@@ -158,10 +282,17 @@ export default function NewSaleScreen() {
           <Text style={styles.cartBarCount}>{itemCount === 0 ? 'Panier vide' : `${formatNumber(itemCount)} article(s)`}</Text>
           <Text style={styles.cartBarTotal}>{formatMoney(subtotal, currency)}</Text>
         </View>
-        <Button label="Encaisser" icon="arrow-forward" disabled={cart.length === 0} onPress={() => setCheckoutOpen(true)} style={{ minWidth: 150 }} />
+        <Button label="En attente" icon="pause" variant="secondary" disabled={cart.length === 0} loading={hold.isPending} onPress={() => hold.mutate()} />
+        <Button label="Encaisser" icon="arrow-forward" disabled={cart.length === 0} onPress={() => setCheckoutOpen(true)} style={{ minWidth: 130 }} />
       </View>
 
       <Checkout
+        key={checkoutKey}
+        customer={customer}
+        onCustomerChange={setCustomer}
+        initialDiscount={resumedOptions.remise}
+        initialPaymentMethod={resumedOptions.modePaiement as PaymentMethod | undefined}
+        onCompleted={() => clearSaleDraft(activeStoreId)}
         visible={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
         cart={cart}
@@ -238,7 +369,17 @@ function Checkout({
   currency,
   storeId,
   onChangeQuantity,
+  customer,
+  onCustomerChange: setCustomer,
+  initialDiscount,
+  initialPaymentMethod,
+  onCompleted,
 }: {
+  customer: Customer | null;
+  onCustomerChange: (customer: Customer | null) => void;
+  initialDiscount?: number;
+  initialPaymentMethod?: PaymentMethod;
+  onCompleted: () => void;
   visible: boolean;
   onClose: () => void;
   cart: CartLine[];
@@ -253,12 +394,11 @@ function Checkout({
   const toast = useToast();
   const { can } = useAccount();
 
-  const [customer, setCustomer] = useState<{ id: number; nom: string } | null>(null);
   const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [customerSearchText, setCustomerSearchText] = useState('');
   const customerSearch = useDebouncedValue(customerSearchText.trim());
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
-  const [discountText, setDiscountText] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(initialPaymentMethod ?? 'CASH');
+  const [discountText, setDiscountText] = useState(initialDiscount ? String(initialDiscount) : '');
   const [firstPaymentText, setFirstPaymentText] = useState('');
   const [firstTender, setFirstTender] = useState<Exclude<PaymentMethod, 'CREDIT'>>('CASH');
   const saleKey = useRef<string | null>(null);
@@ -288,7 +428,7 @@ function Checkout({
   const sale = useMutation({
     mutationFn: () =>
       createSale({
-        lignes: cart.map((line) => ({ produitId: line.productId, quantite: line.quantity })),
+        lignes: serverLines(cart),
         clientId: customer?.id,
         boutiqueId: storeId,
         modePaiement: paymentMethod,
@@ -298,6 +438,7 @@ function Checkout({
       }, (saleKey.current ??= newIdempotencyKey("sale"))),
     onSuccess: async (created) => {
       saleKey.current = null;
+      onCompleted();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['sales'] }),
         queryClient.invalidateQueries({ queryKey: ['products'] }),
@@ -434,6 +575,21 @@ function Checkout({
 }
 
 const styles = StyleSheet.create({
+  heldBar: { marginTop: spacing.sm, gap: spacing.xs },
+  heldTitle: { fontSize: font.xs, fontWeight: '600', color: colors.warning, textTransform: 'uppercase' },
+  heldChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+  },
+  heldLabel: { fontSize: font.sm, fontWeight: '600', color: colors.text },
+  heldMeta: { fontSize: font.xs, color: colors.textMuted },
   root: { flex: 1, backgroundColor: colors.canvas },
   searchArea: {
     padding: spacing.lg,

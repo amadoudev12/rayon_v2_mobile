@@ -157,3 +157,39 @@ export function listCustomers(params: { search?: string; limit?: number } = {}) 
 export function createCustomer(nom: string) {
   return requestData<Customer>('/api/customers', { method: 'POST', body: { nom } });
 }
+
+// --- Ventes en attente -------------------------------------------------------
+
+export type HeldSale = {
+  id: number;
+  libelle: string;
+  nombreArticles: number;
+  totalEstime: string | number;
+  creeLe: string;
+  client: { id: number; nom: string } | null;
+  creePar: { prenom: string; nom: string };
+};
+
+export type HeldCart = {
+  lignes: { produitId: number; quantite: number; prixUnitaire?: number }[];
+  clientId?: number | null;
+  modePaiement?: string;
+  remise?: number;
+};
+
+export function listHeldSales(storeId: number) {
+  return requestData<HeldSale[]>('/api/held-sales', { query: { storeId } });
+}
+
+export function holdSale(storeId: number, panier: HeldCart, libelle?: string) {
+  return requestData<HeldSale>('/api/held-sales', { method: 'POST', query: { storeId }, body: { panier, libelle } });
+}
+
+/** Reprise atomique : la vente quitte la liste ; un seul appareil peut la reprendre. */
+export function resumeHeldSale(id: number, storeId: number) {
+  return requestData<{ libelle: string; panier: HeldCart }>(`/api/held-sales/${id}/resume`, { method: 'POST', query: { storeId }, body: {} });
+}
+
+export function deleteHeldSale(id: number, storeId: number) {
+  return request<{ message: string }>(`/api/held-sales/${id}`, { method: 'DELETE', query: { storeId } });
+}
